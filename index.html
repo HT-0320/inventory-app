@@ -64,7 +64,19 @@ button {
 <script>
 let mode="in";
 let buffer={}, history=[];
-let itemNames={};
+
+/* デバッグ用の変更 - スキャン成功時と失敗時のログを追加 */
+function onScanSuccess(jan) {
+    console.log("スキャン成功: ", jan);
+    buffer[jan]=(buffer[jan]||0)+1;
+    history.push(jan);
+    updateDisplay();
+    beep();
+}
+
+function onScanError(error) {
+    console.error("スキャンエラー: ", error);
+}
 
 /* モード */
 function toggleMode(){
@@ -80,15 +92,9 @@ function startCamera(){
   html5QrCode.start(
     { facingMode:"environment" },
     { fps:10, qrbox:250 },
-    onScanSuccess
+    onScanSuccess,
+    onScanError
   );
-}
-
-function onScanSuccess(jan){
-  buffer[jan]=(buffer[jan]||0)+1;
-  history.push(jan);
-  updateDisplay();
-  beep();
 }
 
 /* 表示 */
