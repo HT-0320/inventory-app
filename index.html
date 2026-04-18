@@ -19,10 +19,27 @@ body { margin:0; font-family:sans-serif; background:#111; color:#fff; }
 }
 
 .item {
-  font-size:20px;
-  padding:5px;
+  font-size:18px;
+  padding:6px 5px;
   border-bottom:1px solid #333;
 }
+
+.item-name {
+  font-weight:bold;
+  color:#4fc3f7;
+}
+
+.item-jan {
+  font-size:13px;
+  color:#aaa;
+}
+
+.item-qty {
+  float:right;
+  font-size:18px;
+}
+
+.loading { color:#aaa; font-style:italic; }
 
 .controls {
   position:fixed;
@@ -64,18 +81,47 @@ button {
 <script>
 let mode="in";
 let buffer={}, history=[];
+let productNames={};  /* JANコード → 商品名キャッシュ */
 
-/* デバッグ用の変更 - スキャン成功時と失敗時のログを追加 */
-function onScanSuccess(jan) {
-    console.log("スキャン成功: ", jan);
-    buffer[jan]=(buffer[jan]||0)+1;
-    history.push(jan);
-    updateDisplay();
-    beep();
+/* 商品名取得（Open Food Facts API） */
+/* productNames[jan] が undefined → 未取得、null → 取得中、string → 取得済み */
+async function fetchProductName(jan) {
+  if (productNames[jan] !== undefined) return; /* 取得中 or 取得済みはスキップ */
+  productNames[jan] = null; /* 取得中フラグ */
+  try {
+    const res = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${jan}?fields=product_name,product_name_ja`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    const data = await res.json();
+    if (data.status === 1 && data.product) {
+      productNames[jan] =
+        data.product.product_name_ja ||
+        data.product.product_name ||
+        "";
+    } else {
+      productNames[jan] = "";
+    }
+  } catch(e) {
+    productNames[jan] = "";
+  }
+  updateDisplay();
+}
+
+/* スキャン成功 */
+async function onScanSuccess(jan) {
+  console.log("スキャン成功: ", jan);
+  buffer[jan] = (buffer[jan] || 0) + 1;
+  history.push(jan);
+  if (productNames[jan] === undefined) {
+    fetchProductName(jan);
+  }
+  updateDisplay();
+  beep();
 }
 
 function onScanError(error) {
-    console.error("スキャンエラー: ", error);
+  /* 通常のスキャン待機エラーはログ抑制 */
 }
 
 /* モード */
@@ -85,13 +131,22 @@ function toggleMode(){
     mode==="in" ? "入荷" : "出庫";
 }
 
-/* カメラ起動 */
+/* カメラ起動（1次元バーコード対応） */
 function startCamera(){
-  const html5QrCode = new Html5Qrcode("reader");
+  const formats = [
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.QR_CODE,
+  ];
+  const html5QrCode = new Html5Qrcode("reader", { formatsToSupport: formats });
 
   html5QrCode.start(
-    { facingMode:"environment" },
-    { fps:10, qrbox:250 },
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 280, height: 120 } },
     onScanSuccess,
     onScanError
   );
@@ -99,20 +154,41 @@ function startCamera(){
 
 /* 表示 */
 function updateDisplay(){
-  let html="";
-  for(let jan in buffer){
-    html+=`<div class="item">${jan} × ${buffer[jan]}</div>`;
+  let html = "";
+  for (let jan in buffer) {
+    const nameVal = productNames[jan];
+    let nameHtml;
+    if (nameVal === undefined || nameVal === null) {
+      nameHtml = `<span class="item-name loading">取得中…</span>`;
+    } else if (nameVal === "") {
+      nameHtml = `<span class="item-name" style="color:#f90">商品名不明</span>`;
+    } else {
+      nameHtml = `<span class="item-name">${escapeHtml(nameVal)}</span>`;
+    }
+    html += `<div class="item">
+      <span class="item-qty">× ${buffer[jan]}</span>
+      ${nameHtml}
+      <div class="item-jan">${escapeHtml(jan)}</div>
+    </div>`;
   }
-  document.getElementById("result").innerHTML=html;
+  document.getElementById("result").innerHTML = html;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
 }
 
 /* 保存（ローカル） */
 function saveData(){
-  let data = JSON.parse(localStorage.getItem("stock")||"{}");
+  let data = JSON.parse(localStorage.getItem("stock") || "{}");
 
-  for(let jan in buffer){
+  for (let jan in buffer) {
     let qty = mode==="in" ? buffer[jan] : -buffer[jan];
-    data[jan]=(data[jan]||0)+qty;
+    data[jan] = (data[jan] || 0) + qty;
   }
 
   localStorage.setItem("stock", JSON.stringify(data));
@@ -122,26 +198,26 @@ function saveData(){
 
 /* 操作 */
 function undo(){
-  let last=history.pop();
-  if(!last)return;
+  let last = history.pop();
+  if (!last) return;
   buffer[last]--;
-  if(buffer[last]===0)delete buffer[last];
+  if (buffer[last] === 0) delete buffer[last];
   updateDisplay();
 }
 
 function resetBuffer(){
-  buffer={}; history=[];
+  buffer = {}; history = [];
   updateDisplay();
 }
 
 /* 音 */
 function beep(){
   try{
-    const ctx=new AudioContext();
-    const osc=ctx.createOscillator();
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
     osc.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime+0.05);
+    osc.stop(ctx.currentTime + 0.05);
   }catch(e){}
 }
 
