@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>さんすうトレーニング</title>
+  <style>
+    /* ===== リセット・ベース ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Rounded Mplus 1c', 'M PLUS Rounded 1c', 'Kosugi Maru', sans-serif;
+      background: #fff8e1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ===== 共通スクリーン ===== */
+    .screen {
+      display: none;
+      width: 100%;
+      max-width: 480px;
+      min-height: 100vh;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px;
+      background: #fff8e1;
+    }
+    .screen.active { display: flex; }
+
+    /* ===== 開始画面 ===== */
+    #startScreen {
+      justify-content: center;
+      gap: 32px;
+    }
+
+    .start-title {
+      font-size: 2.4rem;
+      font-weight: bold;
+      color: #e65100;
+      text-align: center;
+      text-shadow: 2px 2px 0 #ffcc80;
+      line-height: 1.3;
+    }
+
+    .start-subtitle {
+      font-size: 1.1rem;
+      color: #555;
+      text-align: center;
+    }
+
+    .op-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .op-btn {
+      padding: 22px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 18px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 rgba(0,0,0,.18);
+      transition: transform .1s, box-shadow .1s;
+      letter-spacing: .1em;
+    }
+    .op-btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 rgba(0,0,0,.18);
+    }
+    .op-btn.add    { background: #ff7043; color: #fff; }
+    .op-btn.sub    { background: #42a5f5; color: #fff; }
+    .op-btn.mul    { background: #66bb6a; color: #fff; }
+
+    /* ===== 解答中画面 ===== */
+    #answerScreen {
+      justify-content: flex-start;
+      gap: 0;
+    }
+
+    /* 進捗バー */
+    .progress-wrap {
+      width: 100%;
+      background: #ffe0b2;
+      border-radius: 8px;
+      height: 18px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #ff7043, #ffca28);
+      border-radius: 8px;
+      transition: width .3s;
+      width: 0%;
+    }
+
+    .progress-label {
+      font-size: .95rem;
+      color: #666;
+      text-align: right;
+      margin-bottom: 14px;
+      width: 100%;
+    }
+
+    /* 問題エリア */
+    .question-area {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-height: 35vh;
+    }
+
+    .question-text {
+      font-size: 4rem;
+      font-weight: bold;
+      color: #1a237e;
+      letter-spacing: .08em;
+    }
+
+    /* 入力エリア */
+    .input-area {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 8px;
+    }
+
+    .answer-display {
+      font-size: 2.8rem;
+      font-weight: bold;
+      color: #333;
+      background: #fff;
+      border: 3px solid #ffb74d;
+      border-radius: 14px;
+      width: 100%;
+      max-width: 320px;
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: .1em;
+    }
+    .answer-display.placeholder { color: #bbb; font-size: 1.4rem; }
+
+    /* 決定ボタン */
+    .confirm-btn {
+      width: 100%;
+      max-width: 320px;
+      padding: 16px;
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: #ff7043;
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 5px 0 #bf360c;
+      transition: transform .1s, box-shadow .1s;
+      letter-spacing: .15em;
+    }
+    .confirm-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 #bf360c;
+    }
+
+    /* テンキー */
+    .numpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .numpad-btn {
+      padding: 16px 0;
+      font-size: 1.7rem;
+      font-weight: bold;
+      background: #fff;
+      color: #333;
+      border: 2px solid #ffcc80;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #ffb300;
+      transition: transform .1s, box-shadow .1s;
+    }
+    .numpad-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #ffb300;
+    }
+    .numpad-btn.zero { grid-column: 1 / 3; }
+    .numpad-btn.del  {
+      background: #ef9a9a;
+      border-color: #e57373;
+      box-shadow: 0 4px 0 #c62828;
+      color: #7f0000;
+    }
+    .numpad-btn.del:active { box-shadow: 0 1px 0 #c62828; }
+
+    /* ===== 結果表示画面 ===== */
+    #resultScreen {
+      justify-content: flex-start;
+      padding: 0;
+    }
+
+    /* 上半分 — スコア */
+    .result-top {
+      width: 100%;
+      background: linear-gradient(135deg, #ff7043, #ffca28);
+      padding: 32px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .result-title {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 1px 1px 4px rgba(0,0,0,.25);
+    }
+
+    .result-score {
+      font-size: 4rem;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,.2);
+    }
+
+    .result-time {
+      font-size: 1.8rem;
+      color: #fff3e0;
+      font-weight: bold;
+    }
+
+    .result-restart-btn {
+      margin-top: 12px;
+      padding: 12px 36px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      background: #fff;
+      color: #e65100;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 rgba(0,0,0,.2);
+      letter-spacing: .1em;
+    }
+    .result-restart-btn:active { transform: translateY(2px); }
+
+    /* 下半分 — 問題一覧 */
+    .result-bottom {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fff;
+      min-height: 0;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid #ffe082;
+      flex-shrink: 0;
+    }
+
+    .filter-btn {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 1rem;
+      font-weight: bold;
+      background: #fff;
+      color: #555;
+      border: 2px solid #ffcc80;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .filter-btn.active {
+      background: #ff7043;
+      color: #fff;
+      border-color: #ff7043;
+    }
+
+    .answer-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 12px 16px;
+    }
+
+    .answer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      background: #fff8e1;
+      border-radius: 10px;
+      border-left: 5px solid #ffca28;
+    }
+    .answer-item.correct { border-left-color: #66bb6a; background: #f1f8e9; }
+    .answer-item.wrong   { border-left-color: #ef5350; background: #fce4ec; }
+
+    .ai-num  { font-size: .85rem; color: #999; width: 28px; flex-shrink: 0; }
+    .ai-q    { font-size: 1.15rem; font-weight: bold; color: #333; flex: 1; padding: 0 6px; }
+    .ai-ans  { font-size: 1.05rem; color: #555; flex: 1; padding: 0 6px; text-align: right; }
+    .ai-mark { font-size: 1.6rem; font-weight: bold; width: 32px; text-align: center; flex-shrink: 0; }
+    .ai-mark.o { color: #43a047; }
+    .ai-mark.x { color: #e53935; }
+  </style>
+</head>
+<body>
+
+<!-- ===================== 開始画面 ===================== -->
+<div id="startScreen" class="screen active">
+  <div class="start-title">🔢 さんすう<br>トレーニング</div>
+  <div class="start-subtitle">100もん　チャレンジ！</div>
+  <div class="op-buttons">
+    <button class="op-btn add" onclick="startGame('add')">＋　たしざん</button>
+    <button class="op-btn sub" onclick="startGame('sub')">－　ひきざん</button>
+    <button class="op-btn mul" onclick="startGame('mul')">×　かけざん</button>
+  </div>
+</div>
+
+<!-- ===================== 解答中画面 ===================== -->
+<div id="answerScreen" class="screen">
+  <div class="progress-wrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-label" id="progressLabel">1 / 100</div>
+
+  <div class="question-area">
+    <div class="question-text" id="questionText">? ＋ ? ＝</div>
+  </div>
+
+  <div class="input-area">
+    <div class="answer-display placeholder" id="answerDisplay">こたえをいれてね</div>
+    <button class="confirm-btn" id="confirmBtn" onclick="confirmAnswer()">✔ けってい</button>
+    <div class="numpad">
+      <button class="numpad-btn" onclick="numInput('7')">7</button>
+      <button class="numpad-btn" onclick="numInput('8')">8</button>
+      <button class="numpad-btn" onclick="numInput('9')">9</button>
+      <button class="numpad-btn" onclick="numInput('4')">4</button>
+      <button class="numpad-btn" onclick="numInput('5')">5</button>
+      <button class="numpad-btn" onclick="numInput('6')">6</button>
+      <button class="numpad-btn" onclick="numInput('1')">1</button>
+      <button class="numpad-btn" onclick="numInput('2')">2</button>
+      <button class="numpad-btn" onclick="numInput('3')">3</button>
+      <button class="numpad-btn zero" onclick="numInput('0')">0</button>
+      <button class="numpad-btn del" onclick="numDelete()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 結果表示画面 ===================== -->
+<div id="resultScreen" class="screen">
+  <div class="result-top">
+    <div class="result-title">🎉 けっか はっぴょう！</div>
+    <div class="result-score" id="resultScore">100 / 100</div>
+    <div class="result-time"  id="resultTime">⏱ 0ふん 0びょう</div>
+    <button class="result-restart-btn" onclick="backToStart()">🔄 もどる</button>
+  </div>
+  <div class="result-bottom">
+    <div class="filter-bar">
+      <button class="filter-btn active" id="filterAll"    onclick="setFilter('all')">ぜんぶ</button>
+      <button class="filter-btn"        id="filterCorrect" onclick="setFilter('correct')">せいかい</button>
+      <button class="filter-btn"        id="filterWrong"  onclick="setFilter('wrong')">まちがい</button>
+    </div>
+    <div class="answer-list" id="answerList"></div>
+  </div>
+</div>
+
+<script>
+  /* ========================================================
+     状態変数
+  ======================================================== */
+  const TOTAL = 100;
+  const MAX_INPUT_DIGITS = 3;
+
+  let questions    = [];   // { a, b, op, answer }
+  let userAnswers  = [];   // 入力値 (number|null)
+  let current      = 0;
+  let inputVal     = '';
+  let startTime    = 0;
+  let elapsedMs    = 0;
+  let currentFilter= 'all';
+
+  /* ========================================================
+     問題生成
+  ======================================================== */
+  function rand(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function generateQuestion(op) {
+    let a, b, answer, symbol;
+    switch (op) {
+      case 'add':
+        a = rand(1, 9); b = rand(1, 9);
+        answer = a + b;
+        symbol = '＋';
+        break;
+      case 'sub':
+        a = rand(1, 9); b = rand(1, a);   // b ≤ a → 答えが 0 以上
+        answer = a - b;
+        symbol = '－';
+        break;
+      case 'mul':
+        a = rand(1, 9); b = rand(1, 9);
+        answer = a * b;
+        symbol = '×';
+        break;
+    }
+    return { a, b, op, symbol, answer };
+  }
+
+  function generateQuestions(op) {
+    const qs = [];
+    for (let i = 0; i < TOTAL; i++) qs.push(generateQuestion(op));
+    return qs;
+  }
+
+  /* ========================================================
+     画面切り替え
+  ======================================================== */
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  /* ========================================================
+     開始
+  ======================================================== */
+  function startGame(op) {
+    questions   = generateQuestions(op);
+    userAnswers = [];
+    current     = 0;
+    inputVal    = '';
+    elapsedMs   = 0;
+
+    showScreen('answerScreen');
+    renderQuestion();
+    startTimer();
+  }
+
+  /* ========================================================
+     タイマー
+  ======================================================== */
+  function startTimer() {
+    startTime = Date.now();
+  }
+
+  function stopTimer() {
+    elapsedMs = Date.now() - startTime;
+  }
+
+  /* ========================================================
+     解答中画面
+  ======================================================== */
+  function renderQuestion() {
+    const q = questions[current];
+    document.getElementById('questionText').textContent =
+      `${q.a} ${q.symbol} ${q.b} ＝`;
+
+    const pct = (current / TOTAL) * 100;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent =
+      `${current + 1} / ${TOTAL}`;
+
+    inputVal = '';
+    updateDisplay();
+  }
+
+  function updateDisplay() {
+    const el = document.getElementById('answerDisplay');
+    if (inputVal === '') {
+      el.textContent = 'こたえをいれてね';
+      el.classList.add('placeholder');
+    } else {
+      el.textContent = inputVal;
+      el.classList.remove('placeholder');
+    }
+  }
+
+  function numInput(n) {
+    if (inputVal.length >= MAX_INPUT_DIGITS) return;
+    inputVal += n;
+    updateDisplay();
+  }
+
+  function numDelete() {
+    inputVal = inputVal.slice(0, -1);
+    updateDisplay();
+  }
+
+  function confirmAnswer() {
+    if (inputVal === '') return;
+    userAnswers.push(parseInt(inputVal, 10));
+    current++;
+
+    if (current >= TOTAL) {
+      stopTimer();
+      showResult();
+    } else {
+      renderQuestion();
+    }
+  }
+
+  /* ========================================================
+     結果表示
+  ======================================================== */
+  function showResult() {
+    // 正解数
+    let correct = 0;
+    for (let i = 0; i < TOTAL; i++) {
+      if (userAnswers[i] === questions[i].answer) correct++;
+    }
+
+    // 時間フォーマット
+    const totalSec = Math.floor(elapsedMs / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+
+    document.getElementById('resultScore').textContent =
+      `${correct} / ${TOTAL} せいかい`;
+    document.getElementById('resultTime').textContent =
+      `⏱ ${min}ふん ${sec}びょう`;
+
+    currentFilter = 'all';
+    updateFilterButtons();
+    renderAnswerList();
+
+    showScreen('resultScreen');
+    // 一覧の先頭にスクロール
+    document.getElementById('answerList').scrollTop = 0;
+  }
+
+  function renderAnswerList() {
+    const list = document.getElementById('answerList');
+    list.innerHTML = '';
+
+    questions.forEach((q, i) => {
+      const ua = userAnswers[i];
+      const isCorrect = ua === q.answer;
+
+      if (currentFilter === 'correct' && !isCorrect) return;
+      if (currentFilter === 'wrong'   &&  isCorrect) return;
+
+      const item = document.createElement('div');
+      item.className = 'answer-item ' + (isCorrect ? 'correct' : 'wrong');
+
+      item.innerHTML =
+        `<span class="ai-num">${i + 1}</span>` +
+        `<span class="ai-q">${q.a} ${q.symbol} ${q.b} ＝ <strong>${q.answer}</strong></span>` +
+        `<span class="ai-ans">あなた: ${ua}</span>` +
+        `<span class="ai-mark ${isCorrect ? 'o' : 'x'}">${isCorrect ? '○' : '✕'}</span>`;
+
+      list.appendChild(item);
+    });
+  }
+
+  /* ========================================================
+     フィルター
+  ======================================================== */
+  function setFilter(f) {
+    currentFilter = f;
+    updateFilterButtons();
+    renderAnswerList();
+    document.getElementById('answerList').scrollTop = 0;
+  }
+
+  function updateFilterButtons() {
+    ['all', 'correct', 'wrong'].forEach(f => {
+      const el = document.getElementById(
+        f === 'all' ? 'filterAll' : f === 'correct' ? 'filterCorrect' : 'filterWrong'
+      );
+      el.classList.toggle('active', f === currentFilter);
+    });
+  }
+
+  /* ========================================================
+     もどる
+  ======================================================== */
+  function backToStart() {
+    showScreen('startScreen');
+  }
+</script>
+</body>
+</html>
