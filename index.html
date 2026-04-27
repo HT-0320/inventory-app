@@ -113,6 +113,7 @@ button { cursor: pointer; border: none; color: #fff; font-weight: bold; }
 .btn-restore { background: #fd7e14; }
 .btn-cloud   { background: #6f42c1; }
 .btn-stock   { background: #20c997; }
+.btn-imgscan { background: #e83e8c; }
 </style>
 </head>
 <body>
@@ -149,11 +150,15 @@ button { cursor: pointer; border: none; color: #fff; font-weight: bold; }
     <button class="btn-restore" onclick="triggerImport()">📤 復元</button>
     <button class="btn-cloud"   onclick="handleCloud()">☁ クラウド</button>
     <button class="btn-stock"   onclick="openInventory()">📊 在庫表示</button>
+    <button class="btn-imgscan" onclick="triggerImageScan()">🖼 画像読取</button>
   </div>
 </div>
 
 <!-- ファイル選択（非表示） -->
-<input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(this)">
+<input type="file" id="importFile"    accept=".json,application/json" style="display:none" onchange="importData(this)">
+<input type="file" id="imageScanFile" accept="image/*"                style="display:none" onchange="scanImageFile(this)" aria-label="画像ファイルを選択してバーコードをスキャン">
+<!-- 画像スキャン用の一時コンテナ（非表示） -->
+<div id="img-scan-worker" style="display:none"></div>
 
 <script>
 "use strict";
@@ -344,23 +349,55 @@ function onScanError() {}
 /* =====================================================================
    カメラ
    ===================================================================== */
+const SCAN_FORMATS = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.QR_CODE,
+];
+
+/* グローバルスキャナーインスタンス（画像スキャンでも再利用） */
+let scanner = null;
+
 function startCamera() {
-  const formats = [
-    Html5QrcodeSupportedFormats.EAN_13,
-    Html5QrcodeSupportedFormats.EAN_8,
-    Html5QrcodeSupportedFormats.UPC_A,
-    Html5QrcodeSupportedFormats.UPC_E,
-    Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.QR_CODE,
-  ];
-  const scanner = new Html5Qrcode("reader", { formatsToSupport: formats });
+  scanner = new Html5Qrcode("reader", { formatsToSupport: SCAN_FORMATS });
   scanner.start(
     { facingMode: "environment" },
-    { fps: 10, qrbox: { width: 280, height: 120 } },
+    /* qrbox を正方形にすることで縦向き・横向きどちらのバーコードも検出できる */
+    { fps: 15, qrbox: { width: 250, height: 250 } },
     onScanSuccess,
     onScanError
   );
+}
+
+/** 画像ファイル選択ダイアログを開く */
+function triggerImageScan() {
+  document.getElementById("imageScanFile").value = "";
+  document.getElementById("imageScanFile").click();
+}
+
+/** 選択された画像ファイルのバーコードをスキャンする */
+async function scanImageFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  /* スキャン専用の一時インスタンスを作成（カメラスキャナーとは別） */
+  const imgScanner = new Html5Qrcode("img-scan-worker", {
+    formatsToSupport: SCAN_FORMATS,
+    verbose: false,
+  });
+
+  try {
+    /* 第 2 引数 true = 複数の候補を試みる (showImage) */
+    const result = await imgScanner.scanFile(file, /* showImage= */ false);
+    onScanSuccess(result);
+    alert("画像からバーコードを読み取りました: " + result);
+  } catch (err) {
+    alert("バーコードを読み取れませんでした。\n" + err);
+  }
 }
 
 /* =====================================================================
