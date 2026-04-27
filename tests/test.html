@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>在庫管理アプリ – ユニットテスト</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
+    h1 { color: #4fc3f7; }
+    .pass { color: #28a745; }
+    .fail { color: #dc3545; }
+    .section { margin-top: 20px; border-top: 1px solid #333; padding-top: 10px; }
+    pre { background: #222; padding: 10px; border-radius: 4px; font-size: 13px; }
+    #summary { font-size: 20px; font-weight: bold; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🧪 在庫管理アプリ ユニットテスト</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   テスト対象のコードをインライン（index.html より抜粋）
+   ============================================================ */
+let data = { items: [], settings: {}, updatedAt: 0 };
+
+function validateData(d) {
+  return d !== null &&
+    typeof d === "object" &&
+    Array.isArray(d.items) &&
+    typeof d.settings === "object";
+}
+
+function getItem(jan) {
+  return data.items.find(item => item.jan === jan) || null;
+}
+
+function applyDelta(jan, name, delta) {
+  const item = getItem(jan);
+  if (item) {
+    item.qty += delta;
+    if (name && name !== jan) item.name = name;
+  } else {
+    data.items.push({ jan, name: name || jan, qty: delta });
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+let buffer = {};
+let history = [];
+
+function undo() {
+  const last = history.pop();
+  if (!last) return;
+  buffer[last]--;
+  if (buffer[last] === 0) delete buffer[last];
+}
+
+function resetBuffer() {
+  buffer  = {};
+  history = [];
+}
+
+/* ============================================================
+   テストランナー
+   ============================================================ */
+let passCount = 0;
+let failCount = 0;
+const output = [];
+
+function assert(description, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (ok) {
+    passCount++;
+    output.push(`<div class="pass">✅ PASS: ${description}</div>`);
+  } else {
+    failCount++;
+    output.push(`<div class="fail">❌ FAIL: ${description}<br>
+      <pre>期待値: ${JSON.stringify(expected)}\n実際値: ${JSON.stringify(actual)}</pre>
+    </div>`);
+  }
+}
+
+function section(title) {
+  output.push(`<div class="section"><strong>${title}</strong></div>`);
+}
+
+/* ============================================================
+   テストケース
+   ============================================================ */
+
+// --- validateData ---
+section("validateData");
+assert("正常なデータを受け入れる",
+  validateData({ items: [], settings: {} }), true);
+assert("items が配列でない場合は失敗",
+  validateData({ items: "not-array", settings: {} }), false);
+assert("settings がオブジェクトでない場合は失敗",
+  validateData({ items: [], settings: "bad" }), false);
+assert("null を拒否する",
+  validateData(null), false);
+assert("空オブジェクトを拒否する",
+  validateData({}), false);
+
+// --- getItem ---
+section("getItem");
+data = { items: [{ jan: "4901234567890", name: "テスト商品", qty: 5 }], settings: {}, updatedAt: 0 };
+assert("存在する JAN コードで商品を取得できる",
+  getItem("4901234567890"), { jan: "4901234567890", name: "テスト商品", qty: 5 });
+assert("存在しない JAN コードは null を返す",
+  getItem("0000000000000"), null);
+
+// --- applyDelta ---
+section("applyDelta");
+data = { items: [], settings: {}, updatedAt: 0 };
+applyDelta("1111111111111", "新商品A", 3);
+assert("新規アイテムを追加できる",
+  getItem("1111111111111"), { jan: "1111111111111", name: "新商品A", qty: 3 });
+
+applyDelta("1111111111111", "新商品A", 2);
+assert("既存アイテムの数量を加算できる",
+  getItem("1111111111111").qty, 5);
+
+applyDelta("1111111111111", "新商品A", -3);
+assert("既存アイテムの数量を減算できる",
+  getItem("1111111111111").qty, 2);
+
+applyDelta("2222222222222", null, 1);
+assert("name が null の場合は JAN コードを名前として使用する",
+  getItem("2222222222222").name, "2222222222222");
+
+// --- escapeHtml ---
+section("escapeHtml");
+assert("& をエスケープする",
+  escapeHtml("A&B"), "A&amp;B");
+assert("< をエスケープする",
+  escapeHtml("<div>"), "&lt;div&gt;");
+assert("> をエスケープする",
+  escapeHtml("a>b"), "a&gt;b");
+assert("\" をエスケープする",
+  escapeHtml('"hello"'), "&quot;hello&quot;");
+assert("エスケープ不要な文字はそのまま",
+  escapeHtml("hello world"), "hello world");
+
+// --- undo ---
+section("undo");
+buffer = { "9999999999991": 2, "9999999999992": 1 };
+history = ["9999999999991", "9999999999992", "9999999999991"];
+undo();
+assert("直近のスキャンを取り消す（数量 -1）",
+  buffer["9999999999991"], 1);
+undo();
+assert("数量が 0 になったアイテムはバッファから削除される",
+  buffer["9999999999992"], undefined);
+undo();
+assert("残りのアイテムも取り消せる",
+  buffer["9999999999991"], 0);
+
+// --- resetBuffer ---
+section("resetBuffer");
+buffer  = { "1234567890123": 3 };
+history = ["1234567890123"];
+resetBuffer();
+assert("バッファがクリアされる",
+  Object.keys(buffer).length, 0);
+assert("履歴がクリアされる",
+  history.length, 0);
+
+/* ============================================================
+   結果表示
+   ============================================================ */
+document.getElementById("results").innerHTML = output.join("");
+const total = passCount + failCount;
+const summaryEl = document.getElementById("summary");
+if (failCount === 0) {
+  summaryEl.innerHTML = `<span class="pass">🎉 全 ${total} テスト合格！</span>`;
+} else {
+  summaryEl.innerHTML = `<span class="fail">⚠️ ${total} テスト中 ${failCount} 件失敗（${passCount} 件合格）</span>`;
+}
+</script>
+</body>
+</html>
