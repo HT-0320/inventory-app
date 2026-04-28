@@ -2,9 +2,12 @@
   "name": "inventory-app",
   "version": "1.0.0",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "test:barcode": "node tests/barcode-test.js"
   },
   "devDependencies": {
-    "jest": "^29.0.0"
+    "jest": "^29.0.0",
+    "jimp": "^0.22.12",
+    "@zxing/library": "^0.21.3"
   }
 }
